@@ -1,86 +1,68 @@
-# wingman
-import React, { useState } from 'react';
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+# Real-Time Sports Prediction Market Mean-Reversion Bot
 
-const samplePitches = [
-  {
-    id: 1,
-    friendName: "Lina",
-    singleName: "Jayden",
-    reason: "Jayden is the funniest, most loyal person you'll meet. He once biked 12 miles to bring me soup when I was sick.",
-    image: "https://randomuser.me/api/portraits/men/32.jpg",
-  },
-  {
-    id: 2,
-    friendName: "Mike",
-    singleName: "Alana",
-    reason: "Alana is sunshine in human form. She's a chef and a poet — literally.",
-    image: "https://randomuser.me/api/portraits/women/65.jpg",
-  }
-];
+This repository contains a **deterministic, rule-based** Python trading bot for sports prediction markets (Kalshi-style yes/no contracts).
 
-export default function WingrApp() {
-  const [pitches, setPitches] = useState(samplePitches);
-  const [form, setForm] = useState({ friendName: '', singleName: '', reason: '', image: '' });
+## Strategy Goal
 
-  const handleSubmit = () => {
-    setPitches([{ id: Date.now(), ...form }, ...pitches]);
-    setForm({ friendName: '', singleName: '', reason: '', image: '' });
-  };
+This bot is **not** trying to predict final game outcomes. It targets short-term market overreactions:
 
-  return (
-    <div className="max-w-3xl mx-auto p-6 space-y-8">
-      <h1 className="text-4xl font-bold text-center">Wingr: Pitch Your Single Friends</h1>
+- Detect when a previously favored team experiences a sharp implied-probability drop.
+- Enter a mean-reversion trade if game context still supports a rebound.
+- Exit quickly via strict take-profit / stop-loss / time-based rules.
 
-      <div className="space-y-4 border p-4 rounded-2xl shadow">
-        <h2 className="text-2xl font-semibold">Create a Pitch</h2>
-        <Input
-          placeholder="Your name (wingman)"
-          value={form.friendName}
-          onChange={(e) => setForm({ ...form, friendName: e.target.value })}
-        />
-        <Input
-          placeholder="Single friend's name"
-          value={form.singleName}
-          onChange={(e) => setForm({ ...form, singleName: e.target.value })}
-        />
-        <Input
-          placeholder="Image URL"
-          value={form.image}
-          onChange={(e) => setForm({ ...form, image: e.target.value })}
-        />
-        <Textarea
-          placeholder="Why should someone date them?"
-          value={form.reason}
-          onChange={(e) => setForm({ ...form, reason: e.target.value })}
-        />
-        <Button onClick={handleSubmit}>Post Pitch</Button>
-      </div>
+## Architecture
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {pitches.map((pitch) => (
-          <Card key={pitch.id} className="rounded-2xl shadow-xl">
-            <CardContent className="p-4 space-y-2">
-              <div className="flex items-center gap-4">
-                <Avatar>
-                  <AvatarImage src={pitch.image} />
-                  <AvatarFallback>{pitch.singleName[0]}</AvatarFallback>
-                </Avatar>
-                <div>
-                  <h3 className="text-xl font-semibold">{pitch.singleName}</h3>
-                  <p className="text-sm text-gray-500">Pitched by {pitch.friendName}</p>
-                </div>
-              </div>
-              <p className="text-base">{pitch.reason}</p>
-              <Button variant="secondary">Request Intro</Button>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
-}
+- `data_feed.py`
+  - `GameState` model.
+  - `MockSportsDataFeed` for simulation.
+  - `ESPNDataFeed` scaffold with resilient polling + stale-data safeguards.
+- `market.py`
+  - `MarketTick`, `Order`, `Fill` models.
+  - `MockMarket` simulated prediction market with scripted probability paths.
+  - `LiveMarket` protocol wrapper for real API integration.
+- `strategy.py`
+  - Deterministic `MeanReversionStrategy` with shock-detection and strict exits.
+- `execution.py`
+  - `ExecutionEngine` with per-event locking and retry logic.
+  - Position lifecycle + PnL utilities.
+- `risk.py`
+  - Position sizing, daily loss cutoffs, cooldown after loss, overlap prevention.
+- `main.py`
+  - Async orchestration across feeds, market, strategy, risk, and execution.
+  - Simulation runner with built-in scenarios.
+- `test_scenarios.py`
+  - Example tests for entry/rebound/stop-loss behaviors.
+
+## Safety Characteristics
+
+- No LLM dependency for core decisions.
+- Non-blocking async architecture (`asyncio`) to support low-latency loops.
+- Explicit fail-safe behavior on feed failures/stale data.
+- Strict loss controls and trading halt behavior after daily max loss.
+- Designed for simulation-first validation before any live deployment.
+
+## Run (Simulation)
+
+```bash
+python3 main.py --scenario entry_rebound --runtime 8
+python3 main.py --scenario entry_stoploss --runtime 8
+python3 main.py --scenario mixed --runtime 8
+```
+
+## Run Tests
+
+```bash
+python3 -m pytest -q
+```
+
+## Notes Before Any Live Use
+
+1. Integrate authenticated, rate-limited production APIs in `ESPNDataFeed` and `LiveMarket`.
+2. Add durable persistence (database/event log) for audit and recovery.
+3. Backtest and paper-trade extensively before live capital.
+4. Model slippage, fees, and partial fills realistically.
+5. Add operational monitoring/alerts and circuit breakers.
+
+## Important Disclaimer
+
+This code does **not** guarantee profitability and should be treated as an educational/simulation framework. Real markets include execution risk, data issues, liquidity constraints, and regime shifts.
